@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RSVP Reader</title>
+  <link rel="stylesheet" href="styles/app.css" />
+</head>
+<body>
+  <div class="app" id="app">
+    <div class="loader" id="loader">
+      <div class="card">
+        <h1>RSVP Reader</h1>
+        <p>Paste text or upload an <b>.epub</b> and press <b>Start</b>.<br>
+           Shortcuts: <b>Space</b> pause/resume, <b>R</b> restart, <b>←</b> paragraph start, <b>→</b> next paragraph,
+           <b>Shift+←/→</b> previous/next chapter.</p>
+        <textarea id="inputText" placeholder="Paste or type your text here...
+
+Use blank lines to separate paragraphs."></textarea>
+
+        <div class="row" style="margin:10px 0;">
+          <label class="btn" for="epubFile">Upload EPUB</label>
+          <input id="epubFile" type="file" accept=".epub" style="display:none" />
+          <span id="epubName" class="muted" style="margin-left:8px;"></span>
+        </div>
+
+        <div class="example">
+          <div class="card miniCard">
+            <div class="miniStage">
+              <div class="miniWord" id="previewWord">(preview)</div>
+            </div>
+            <div class="dim miniCaption">Preview of first word</div>
+          </div>
+        </div>
+        <div class="controls">
+          <div class="row">
+            <div class="input" title="Words per minute">
+              <span class="muted">WPM</span>
+              <input id="wpmInput" type="number" min="50" step="50" value="500" />
+            </div>
+            <div class="input" title="Pause multiplier">
+              <span class="muted">Pause×</span>
+              <input id="punctMultiplier" type="number" min="1" step="0.25" value="1.6" />
+            </div>
+            <div class="input" title="Choose font">
+              <span class="muted">Font</span>
+              <select id="fontSelect">
+                <option value="sans" selected>Sans</option>
+                <option value="mono">Monospace</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn" id="startBtn">Start</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage" id="stage">
+      <div class="progress">
+        <div class="progressFill" id="progressFill"></div>
+      </div>
+      <div class="chapterBar" id="chapterBar">
+        <span id="chapterLabel" class="muted">Chapter 1 / 1</span>
+      </div>
+      <div class="viewport">
+        <div class="wordWrap" id="wordWrap">
+          <span class="pre" id="pre"></span><span class="pivot" id="pivot"></span><span class="post" id="post"></span>
+        </div>
+      </div>
+      <div class="baseline"></div>
+      <div class="hud">
+        <button class="circleBtn minus" id="minusBtn">−</button>
+        <div class="wpm" id="wpmDisplay">500 WPM</div>
+        <button class="circleBtn plus" id="plusBtn">+</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
