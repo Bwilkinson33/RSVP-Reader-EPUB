@@ -29,6 +29,20 @@ function resolvePath(base, rel){
   return stack.join('/');
 }
 
+function stripFragment(path){
+  if(typeof path !== 'string') return path;
+  const hashIndex = path.indexOf('#');
+  return hashIndex === -1 ? path : path.slice(0, hashIndex);
+}
+
+function normalizeResourcePath(opfPath, href){
+  if(!href) return null;
+  const resolved = stripFragment(resolvePath(opfPath, href));
+  if(!resolved) return resolved;
+  const queryIndex = resolved.indexOf('?');
+  return queryIndex === -1 ? resolved : resolved.slice(0, queryIndex);
+}
+
 function cleanTextFromXHTML(xhtmlString){
   // Parse as HTML to easily query elements
   const doc = new DOMParser().parseFromString(xhtmlString, 'text/html');
@@ -79,56 +93,64 @@ async function loadOPF(zip, containerDoc){
 
   // Try nav or ncx for nicer chapter titles (optional)
   // Resolve paths relative to OPF
-  const manifestByHref = {};
-  Object.keys(manifest).forEach(id=>{
-    const abs = resolvePath(opfPath, manifest[id].href);
-    manifestByHref[abs] = id;
-  });
-  let tocTitles = [];
+  const chapterTitleByPath = new Map();
   // Find nav (EPUB 3)
   const navItem = opfDoc.querySelector('manifest > item[properties~="nav"]');
   if(navItem){
-    const navPath = resolvePath(opfPath, navItem.getAttribute('href'));
-    const navFile = await zip.file(navPath).async('string');
-    const navDoc = new DOMParser().parseFromString(navFile, 'text/html');
-    navDoc.querySelectorAll('nav[epub\:type="toc"] li, nav#toc li').forEach(li=>{
-      const a = li.querySelector('a');
-      if(a){
-        const txt = a.textContent.trim();
-        const href = a.getAttribute('href');
-        tocTitles.push({txt, href});
+    const navPath = normalizeResourcePath(opfPath, navItem.getAttribute('href'));
+    if(navPath){
+      const navFileEntry = zip.file(navPath);
+      if(navFileEntry){
+        const navFile = await navFileEntry.async('string');
+        const navDoc = new DOMParser().parseFromString(navFile, 'text/html');
+        navDoc.querySelectorAll('nav[epub\:type="toc"] a, nav#toc a').forEach(a=>{
+          const txt = a.textContent.trim();
+          const href = normalizeResourcePath(opfPath, a.getAttribute('href'));
+          if(txt && href && !chapterTitleByPath.has(href)){
+            chapterTitleByPath.set(href, txt);
+          }
+        });
       }
-    });
+    }
   } else {
     // Fallback: NCX (EPUB 2)
     const ncxId = opfDoc.querySelector('spine').getAttribute('toc');
     if(ncxId && manifest[ncxId]){
-      const ncxPath = resolvePath(opfPath, manifest[ncxId].href);
+      const ncxPath = normalizeResourcePath(opfPath, manifest[ncxId].href);
+      if(!ncxPath) return { opfPath, spine, manifest, title, chapterTitleByPath };
       const ncxDoc = await readXml(zip, ncxPath);
-      ncxDoc.querySelectorAll('navMap > navPoint > navLabel > text').forEach(t=>{
-        const txt = t.textContent.trim();
-        tocTitles.push({txt});
+      const navPoints = ncxDoc.querySelectorAll('navPoint');
+      navPoints.forEach(np=>{
+        const label = np.querySelector('navLabel > text');
+        const content = np.querySelector('content');
+        const txt = label ? label.textContent.trim() : '';
+        const href = content ? normalizeResourcePath(ncxPath, content.getAttribute('src')) : null;
+        if(txt && href && !chapterTitleByPath.has(href)){
+          chapterTitleByPath.set(href, txt);
+        }
       });
     }
   }
 
-  return { opfPath, spine, manifest, title, tocTitles };
+  return { opfPath, spine, manifest, title, chapterTitleByPath };
 }
 
 export async function loadEpubFile(file){
   const zip = await JSZip.loadAsync(file);
   const containerDoc = await readXml(zip, 'META-INF/container.xml');
-  const { opfPath, spine, manifest, title, tocTitles } = await loadOPF(zip, containerDoc);
+  const { opfPath, spine, manifest, title, chapterTitleByPath } = await loadOPF(zip, containerDoc);
 
   const chapters = [];
   for(let i=0;i<spine.length;i++){
     const href = spine[i];
-    const chapPath = resolvePath(opfPath, href);
+    const chapPath = normalizeResourcePath(opfPath, href);
+    if(!chapPath) continue;
     const file = zip.file(chapPath);
     if(!file) continue;
     const xhtml = await file.async('string');
     const text = cleanTextFromXHTML(xhtml);
-    chapters.push({ title: (tocTitles[i]?.txt || `Chapter ${i+1}`), text });
+    const titleFromToc = chapPath ? chapterTitleByPath.get(chapPath) : null;
+    chapters.push({ title: (titleFromToc || `Chapter ${i+1}`), text });
   }
   return { title, chapters };
 }
